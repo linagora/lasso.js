@@ -1,0 +1,78 @@
+{
+  "name": "lasso.js",
+  "version": "0.1.0",
+  "description": "Node.js N-API binding for Lasso SAML library",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "install": "prebuild-install || node-gyp rebuild",
+    "build": "node-gyp rebuild && npm run build:ts",
+    "build:native": "node-gyp rebuild",
+    "build:ts": "tsc",
+    "prebuild": "prebuild --all --strip",
+    "test": "jest",
+    "clean": "node-gyp clean && rm -rf dist",
+    "prepare": "npm run build",
+    "lint": "eslint lib/ test/",
+    "check": "tsc --noEmit"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "binding.gyp",
+    "prebuilds/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "linux",
+    "darwin"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/linagora/lasso.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/linagora/lasso.js/issues"
+  },
+  "homepage": "https://github.com/linagora/lasso.js#readme",
+  "keywords": [
+    "saml",
+    "saml2",
+    "lasso",
+    "sso",
+    "idp",
+    "identity",
+    "federation",
+    "n-api",
+    "native",
+    "binding"
+  ],
+  "author": "Linagora",
+  "license": "GPL-2.0-or-later",
+  "gypfile": true,
+  "binary": {
+    "napi_versions": [
+      8
+    ]
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "node-addon-api": "^8.0.0",
+    "node-gyp": "^10.0.0",
+    "prebuild": "^13.0.0",
+    "prebuild-install": "^7.1.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.0"
+  },
+  "peerDependencies": {
+    "node-addon-api": ">=7.0.0"
+  }
+}
