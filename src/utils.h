@@ -2,6 +2,11 @@
 #define LASSO_UTILS_H
 
 #include <napi.h>
+
+// Include libxml2 headers before lasso.h to avoid extern "C" template conflict
+#include <libxml/tree.h>
+#include <libxml/parser.h>
+
 #include <lasso/lasso.h>
 #include <string>
 

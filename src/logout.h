@@ -2,7 +2,6 @@
 #define LASSO_LOGOUT_H
 
 #include <napi.h>
-#include <lasso/lasso.h>
 #include "server.h"
 
 namespace lasso_js {

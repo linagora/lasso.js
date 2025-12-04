@@ -1,6 +1,14 @@
 #include <napi.h>
-#include <lasso/lasso.h>
 #include <string>
+
+// Include libxml2 headers before lasso.h to avoid extern "C" template conflict
+// The lasso headers use extern "C" which conflicts with C++ templates in ICU
+// headers that libxml2 may include
+#include <libxml/tree.h>
+#include <libxml/parser.h>
+
+// Now include lasso - its extern "C" won't re-include the problematic headers
+#include <lasso/lasso.h>
 #include "utils.h"
 #include "server.h"
 #include "login.h"
