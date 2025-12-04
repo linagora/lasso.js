@@ -265,9 +265,56 @@ npm run build
 npm test
 ```
 
+## Express Middleware
+
+lasso.js includes an Express middleware for easy SP integration:
+
+```typescript
+import express from 'express';
+import session from 'express-session';
+import { createSamlSp, requireAuth } from 'lasso.js';
+
+const app = express();
+app.use(session({ secret: 'secret', resave: false, saveUninitialized: true }));
+
+// Mount SAML SP endpoints
+app.use('/saml', createSamlSp({
+  spMetadata: './sp-metadata.xml',
+  spKey: './sp-key.pem',
+  spCert: './sp-cert.pem',
+  idpMetadata: './idp-metadata.xml',
+  onAuth: (user, req) => {
+    // Called when user authenticates successfully
+    return { id: user.nameId, email: user.attributes.email };
+  },
+  onLogout: (req) => {
+    // Called when user logs out
+  }
+}));
+
+// Protect routes
+app.get('/protected', requireAuth(), (req, res) => {
+  res.send(`Hello ${req.session.user.id}`);
+});
+
+app.listen(3000);
+```
+
+### Endpoints Created
+
+- `GET /saml/metadata` - SP metadata XML
+- `GET /saml/login` - Initiate SAML login
+- `POST /saml/acs` - Assertion Consumer Service
+- `GET /saml/logout` - Initiate SAML logout
+- `GET|POST /saml/slo` - Single Logout Service
+
 ## License
 
 GPL-2.0-or-later (same as Lasso library)
+
+## Copyright
+
+Copyright (c) [LINAGORA](https://linagora.com)
 
 ## Contributing
 

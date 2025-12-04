@@ -17,6 +17,7 @@ Napi::Object Logout::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("buildResponseMsg", &Logout::BuildResponseMsg),
     InstanceMethod("processResponseMsg", &Logout::ProcessResponseMsg),
     InstanceMethod("getNextProviderId", &Logout::GetNextProviderId),
+    InstanceMethod("setNameId", &Logout::SetNameId),
 
     // Getters/Setters
     InstanceAccessor("identity", &Logout::GetIdentity, &Logout::SetIdentity),
@@ -287,6 +288,49 @@ Napi::Value Logout::GetMsgBody(const Napi::CallbackInfo& info) {
   }
 
   return Napi::String::New(env, profile->msg_body);
+}
+
+/**
+ * Set the NameID for the logout request
+ * @param nameId - The name identifier value
+ * @param format - The name ID format (optional)
+ */
+Napi::Value Logout::SetNameId(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsString()) {
+    throw Napi::TypeError::New(env, "Expected nameId string as first argument");
+  }
+
+  std::string nameId = info[0].As<Napi::String>().Utf8Value();
+  std::string format = LASSO_SAML2_NAME_IDENTIFIER_FORMAT_UNSPECIFIED;
+
+  if (info.Length() > 1 && info[1].IsString()) {
+    format = info[1].As<Napi::String>().Utf8Value();
+  }
+
+  LassoProfile* profile = LASSO_PROFILE(logout_);
+
+  // Create a new SAML2 NameID
+  LassoSaml2NameID* nameIdObj = LASSO_SAML2_NAME_ID(lasso_saml2_name_id_new());
+  if (!nameIdObj) {
+    throw Napi::Error::New(env, "Failed to create NameID");
+  }
+
+  // Set the content and format using direct assignment with g_strdup
+  g_free(nameIdObj->content);
+  nameIdObj->content = g_strdup(nameId.c_str());
+  g_free(nameIdObj->Format);
+  nameIdObj->Format = g_strdup(format.c_str());
+
+  // Free existing nameIdentifier if any
+  if (profile->nameIdentifier) {
+    g_object_unref(profile->nameIdentifier);
+  }
+  // Set on the profile (takes ownership)
+  profile->nameIdentifier = LASSO_NODE(nameIdObj);
+
+  return env.Undefined();
 }
 
 } // namespace lasso_js

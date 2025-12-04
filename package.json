@@ -61,11 +61,16 @@
     "single-logout",
     "xml-signature",
     "xmlsec",
+    "express",
+    "middleware",
+    "passport",
+    "oauth",
+    "security",
     "n-api",
     "native",
     "binding"
   ],
-  "author": "Linagora",
+  "author": "LINAGORA <https://linagora.com>",
   "license": "GPL-2.0-or-later",
   "gypfile": true,
   "binary": {
@@ -74,6 +79,7 @@
     ]
   },
   "devDependencies": {
+    "@types/express": "^4.17.25",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
     "jest": "^29.7.0",

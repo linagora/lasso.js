@@ -26,6 +26,7 @@ class Logout : public Napi::ObjectWrap<Logout> {
   Napi::Value BuildResponseMsg(const Napi::CallbackInfo& info);
   Napi::Value ProcessResponseMsg(const Napi::CallbackInfo& info);
   Napi::Value GetNextProviderId(const Napi::CallbackInfo& info);
+  Napi::Value SetNameId(const Napi::CallbackInfo& info);
 
   // Getters/Setters
   Napi::Value GetIdentity(const Napi::CallbackInfo& info);

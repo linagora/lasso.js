@@ -1,6 +1,9 @@
 /**
  * lasso.js - Node.js N-API binding for Lasso SAML library
  *
+ * Copyright (c) LINAGORA <https://linagora.com>
+ * License: GPL-2.0-or-later
+ *
  * @packageDocumentation
  */
 
@@ -288,9 +291,25 @@ export interface Logout {
    * @returns Provider ID or null if no more providers
    */
   getNextProviderId(): string | null;
+
+  /**
+   * Set the NameID for the logout request
+   * @param nameId - The name identifier value
+   * @param format - The name ID format (optional)
+   */
+  setNameId(nameId: string, format?: NameIdFormatType): void;
 }
 
 export const Logout: LogoutConstructor = binding.Logout;
+
+// Express middleware exports
+export {
+  createSamlSp,
+  requireAuth,
+  type SamlSpConfig,
+  type SamlUser,
+  type SamlRequest,
+} from "./express";
 
 // Identity class interface
 interface IdentityConstructor {
