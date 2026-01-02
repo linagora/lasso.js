@@ -123,10 +123,8 @@ jobs:
           push: false
           outputs: type=local,dest=./output
 
-      - name: Extract prebuilds
-        run: |
-          mkdir -p prebuilds
-          cp -r output/prebuilds/* prebuilds/
+      - name: Move prebuilds
+        run: mv output/prebuilds prebuilds
 
       - name: Upload prebuilds
         uses: actions/upload-artifact@v4

@@ -1,4 +1,4 @@
-FROM node:20-bookworm
+FROM node:20-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy all source files first
+# Copy all source files
 COPY . .
 
 # Install dependencies (ignore scripts to avoid premature build)
@@ -22,5 +22,6 @@ RUN npm ci --ignore-scripts
 # Build prebuilds
 RUN npm run prebuildify
 
-# Output stage - copy prebuilds to /prebuilds
-RUN mkdir -p /output/prebuilds && cp -r prebuilds/* /output/prebuilds/
+# Final stage - only prebuilds
+FROM scratch
+COPY --from=builder /app/prebuilds /prebuilds
