@@ -209,7 +209,7 @@ function extractEntityId(metadata: string): string | null {
  */
 export function createSamlSp(config: SamlSpConfig): Router {
   // Lazy import express to avoid requiring it as a dependency
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const express = require("express");
   const router: Router = express.Router();
 
@@ -229,7 +229,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
 
   // Initialize server
   async function initServer(): Promise<void> {
-    if (server) return;
+    if (server) {return;}
 
     if (!lasso.isInitialized()) {
       lasso.init();
@@ -285,7 +285,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
   // GET /login - Initiate SAML login
   router.get("/login", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const login = new lasso.Login(server);
 
@@ -354,7 +354,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
     next: NextFunction
   ) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const samlResponse = req.body.SAMLResponse;
       const session = (req as any).session;
@@ -439,7 +439,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
   // GET /logout - Initiate SAML logout
   router.get("/logout", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const session = (req as any).session;
       const nameId = config.getNameId
@@ -500,7 +500,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
     next: NextFunction
   ) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const samlRequest = req.body.SAMLRequest;
       const samlResponse = req.body.SAMLResponse;
@@ -568,7 +568,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
   // GET /slo - Single Logout Service (HTTP-Redirect binding)
   router.get("/slo", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const samlRequest = req.query.SAMLRequest as string;
       const samlResponse = req.query.SAMLResponse as string;
