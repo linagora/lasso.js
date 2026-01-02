@@ -62,8 +62,9 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x64
-          - os: ubuntu-24.04-arm64
-            target: linux-arm64
+          # Note: linux-arm64 requires self-hosted runners or QEMU cross-compilation
+          # - os: ubuntu-24.04-arm64
+          #   target: linux-arm64
           - os: macos-13
             target: darwin-x64
           - os: macos-14
@@ -115,6 +116,7 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
 
       - name: Download all prebuilds
         uses: actions/download-artifact@v4
@@ -122,6 +124,9 @@ jobs:
           pattern: prebuilds-*
           path: prebuilds/
           merge-multiple: true
+
+      - name: List prebuilds
+        run: ls -laR prebuilds/
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
