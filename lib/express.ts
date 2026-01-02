@@ -10,6 +10,34 @@ import type { Request, Response, NextFunction, Router } from "express";
 import * as crypto from "crypto";
 
 /**
+ * Session data for SAML operations
+ */
+interface SamlSessionData {
+  samlLoginState?: {
+    relayState: string;
+    nonce: string;
+    timestamp: number;
+  };
+  samlNameId?: string;
+  samlNameIdFormat?: lasso.NameIdFormatType;
+  [key: string]: unknown;
+}
+
+/**
+ * Express session interface
+ */
+interface ExpressSession extends SamlSessionData {
+  regenerate(callback: (err: Error | null) => void): void;
+}
+
+/**
+ * Request with session
+ */
+interface RequestWithSession extends Request {
+  session?: ExpressSession;
+}
+
+/**
  * Escape HTML special characters to prevent XSS
  * @internal Exported for testing
  */
@@ -312,7 +340,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
       const result = login.buildAuthnRequestMsg();
 
       // Store login state in session for later validation (CSRF protection)
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
       const nonce = crypto.randomUUID();
       if (session) {
         session.samlLoginState = {
@@ -365,7 +393,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
       if (!server) {throw new Error("Server not initialized");}
 
       const samlResponse = req.body.SAMLResponse;
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
 
       if (!samlResponse) {
         res.status(400).send("Missing SAMLResponse");
@@ -412,7 +440,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
 
       // Extract user information
       const nameId = login.nameId;
-      const nameIdFormat = login.nameIdFormat || lasso.NameIdFormat.UNSPECIFIED;
+      const nameIdFormat = (login.nameIdFormat || lasso.NameIdFormat.UNSPECIFIED) as lasso.NameIdFormatType;
 
       if (!nameId) {
         throw new Error("No NameID in SAML response");
@@ -466,7 +494,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
     try {
       if (!server) {throw new Error("Server not initialized");}
 
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
       const nameId = config.getNameId
         ? config.getNameId(req)
         : session?.samlNameId;
@@ -531,7 +559,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
 
       const samlRequest = req.body.SAMLRequest;
       const samlResponse = req.body.SAMLResponse;
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
 
       if (samlResponse) {
         // This is a logout response from IdP
@@ -601,7 +629,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
 
       const samlRequest = req.query.SAMLRequest as string;
       const samlResponse = req.query.SAMLResponse as string;
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
 
       if (samlResponse) {
         // Logout response from IdP
@@ -665,7 +693,7 @@ export function requireAuth(options?: {
   const loginUrl = options?.loginUrl || "/saml/login";
 
   return (req: Request, res: Response, next: NextFunction): void => {
-    const session = (req as any).session;
+    const session = (req as RequestWithSession).session;
     if (session && session[sessionProperty]) {
       next();
     } else {
