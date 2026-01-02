@@ -5,8 +5,13 @@
 #include <cstring>
 
 // Platform-specific secure memory clearing
-#if defined(__APPLE__) || defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
-  #include <strings.h>  // for explicit_bzero on POSIX
+#if defined(__APPLE__)
+  // macOS: use memset_s (C11) - available since macOS 10.9
+  #define __STDC_WANT_LIB_EXT1__ 1
+  #include <string.h>
+  #define HAVE_MEMSET_S 1
+#elif defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+  #include <strings.h>  // for explicit_bzero
   #define HAVE_EXPLICIT_BZERO 1
 #elif defined(_WIN32)
   #include <windows.h>
@@ -84,7 +89,9 @@ private:
   // Securely zero out the string contents using platform-specific functions
   void secure_clear() {
     if (!data_.empty()) {
-#if defined(HAVE_EXPLICIT_BZERO)
+#if defined(HAVE_MEMSET_S)
+      memset_s(&data_[0], data_.size(), 0, data_.size());
+#elif defined(HAVE_EXPLICIT_BZERO)
       explicit_bzero(&data_[0], data_.size());
 #elif defined(HAVE_SECURE_ZERO_MEMORY)
       SecureZeroMemory(&data_[0], data_.size());
