@@ -1,6 +1,6 @@
 {
   "name": "lasso.js",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "SAML 2.0 Identity Provider (IdP) and Service Provider (SP) for Node.js - Native binding to Lasso library",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
