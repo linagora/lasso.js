@@ -13,14 +13,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy source
+# Copy all source files first
 COPY . .
+
+# Install dependencies (ignore scripts to avoid premature build)
+RUN npm ci --ignore-scripts
 
 # Build prebuilds
 RUN npm run prebuildify
