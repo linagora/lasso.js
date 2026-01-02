@@ -1,7 +1,11 @@
 #include "server.h"
 #include "utils.h"
+#include "secure_string.h"
 
 namespace lasso_js {
+
+// Security: Maximum size for metadata to prevent DoS
+static const size_t MAX_METADATA_SIZE = 10 * 1024 * 1024; // 10 MB
 
 Napi::FunctionReference Server::constructor;
 
@@ -64,9 +68,9 @@ Napi::Value Server::FromBuffers(const Napi::CallbackInfo& info) {
   }
 
   std::string metadata;
-  std::string privateKey;
+  SecureString privateKey;  // Security: Use SecureString for sensitive data
   std::string certificate;
-  std::string password;
+  SecureString password;    // Security: Use SecureString for sensitive data
 
   // Get metadata
   if (info[0].IsString()) {
@@ -78,12 +82,17 @@ Napi::Value Server::FromBuffers(const Napi::CallbackInfo& info) {
     throw Napi::TypeError::New(env, "metadata must be a string or Buffer");
   }
 
-  // Get private key
+  // Security: Check metadata size to prevent DoS
+  if (metadata.size() > MAX_METADATA_SIZE) {
+    throw Napi::Error::New(env, "Metadata too large");
+  }
+
+  // Get private key (use SecureString)
   if (info[1].IsString()) {
     privateKey = info[1].As<Napi::String>().Utf8Value();
   } else if (info[1].IsBuffer()) {
     Napi::Buffer<char> buf = info[1].As<Napi::Buffer<char>>();
-    privateKey = std::string(buf.Data(), buf.Length());
+    privateKey = SecureString(buf.Data(), buf.Length());
   } else {
     throw Napi::TypeError::New(env, "privateKey must be a string or Buffer");
   }
@@ -98,12 +107,13 @@ Napi::Value Server::FromBuffers(const Napi::CallbackInfo& info) {
     throw Napi::TypeError::New(env, "certificate must be a string or Buffer");
   }
 
-  // Get optional password
+  // Get optional password (use SecureString)
   if (info.Length() > 3 && info[3].IsString()) {
     password = info[3].As<Napi::String>().Utf8Value();
   }
 
   // Create Lasso server
+  // Note: privateKey and password will be securely erased when they go out of scope
   LassoServer* server = lasso_server_new_from_buffers(
     metadata.c_str(),
     privateKey.c_str(),
@@ -210,6 +220,11 @@ Napi::Value Server::AddProviderFromBuffer(const Napi::CallbackInfo& info) {
     metadata = std::string(buf.Data(), buf.Length());
   } else {
     throw Napi::TypeError::New(env, "metadata must be a string or Buffer");
+  }
+
+  // Security: Check metadata size to prevent DoS
+  if (metadata.size() > MAX_METADATA_SIZE) {
+    throw Napi::Error::New(env, "Metadata too large");
   }
 
   std::string publicKey;

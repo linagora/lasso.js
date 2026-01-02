@@ -19,6 +19,20 @@
 namespace lasso_js {
 
 /**
+ * Configure libxml2 security settings to prevent XXE attacks
+ * This should be called before any XML parsing
+ */
+static void ConfigureXmlSecurity() {
+  // Disable external entity loading to prevent XXE attacks
+  // This affects the default parser settings
+  xmlSubstituteEntitiesDefault(0);  // Don't substitute entities
+  xmlLoadExtDtdDefaultValue = 0;    // Don't load external DTDs
+
+  // Note: Lasso library may have its own security configuration
+  // but these settings provide additional defense-in-depth
+}
+
+/**
  * Initialize Lasso library
  * Must be called before any other Lasso function
  */
@@ -28,6 +42,9 @@ Napi::Value Init(const Napi::CallbackInfo& info) {
   if (IsLassoInitialized()) {
     return Napi::Boolean::New(env, true);
   }
+
+  // Security: Configure libxml2 to prevent XXE attacks
+  ConfigureXmlSecurity();
 
   int rc = lasso_init();
   if (rc != 0) {

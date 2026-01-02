@@ -7,6 +7,70 @@
 
 import * as lasso from "./index";
 import type { Request, Response, NextFunction, Router } from "express";
+import * as crypto from "crypto";
+
+/**
+ * Session data for SAML operations
+ */
+interface SamlSessionData {
+  samlLoginState?: {
+    relayState: string;
+    nonce: string;
+    timestamp: number;
+  };
+  samlNameId?: string;
+  samlNameIdFormat?: lasso.NameIdFormatType;
+  [key: string]: unknown;
+}
+
+/**
+ * Express session interface
+ */
+interface ExpressSession extends SamlSessionData {
+  regenerate(callback: (err: Error | null) => void): void;
+}
+
+/**
+ * Request with session
+ */
+interface RequestWithSession extends Request {
+  session?: ExpressSession;
+}
+
+/**
+ * Escape HTML special characters to prevent XSS
+ * @internal Exported for testing
+ */
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
+/**
+ * Validate redirect URL to prevent open redirect attacks
+ * @internal Exported for testing
+ */
+export function isValidRedirectUrl(url: string, allowedHosts?: string[]): boolean {
+  // Allow relative URLs (but not protocol-relative)
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    return true;
+  }
+  // If allowed hosts are configured, check against them
+  if (allowedHosts?.length) {
+    try {
+      const parsed = new URL(url);
+      return allowedHosts.includes(parsed.host);
+    } catch {
+      return false;
+    }
+  }
+  // By default, reject absolute URLs
+  return false;
+}
 
 /**
  * SAML SP middleware configuration
@@ -77,6 +141,15 @@ export interface SamlSpConfig {
 
   /** Default redirect URL after logout (default: '/') */
   logoutRedirectUrl?: string;
+
+  // Security options
+
+  /** Allowed hosts for redirects (default: none, only relative URLs allowed) */
+  allowedRedirectHosts?: string[];
+  /** Maximum age of SAML state in ms (default: 300000 = 5 minutes) */
+  stateMaxAge?: number;
+  /** Regenerate session after authentication (default: true) */
+  regenerateSession?: boolean;
 }
 
 /**
@@ -108,11 +181,25 @@ export interface SamlRequest extends Request {
 
 // Helper to read file or return string as-is
 async function readFileOrString(value: string): Promise<string> {
+  // If it looks like content (not a path), return as-is
   if (value.includes("-----BEGIN") || value.includes("<?xml") || value.includes("<")) {
     return value;
   }
+
   const fs = await import("fs");
-  return fs.promises.readFile(value, "utf-8");
+  const pathModule = await import("path");
+
+  // Resolve and normalize the path
+  const resolved = pathModule.resolve(value);
+
+  // Security: Ensure the path doesn't traverse outside cwd
+  const cwd = process.cwd();
+  const relative = pathModule.relative(cwd, resolved);
+  if (relative.startsWith("..") || pathModule.isAbsolute(relative)) {
+    throw new Error("Path traversal detected: path must be within working directory");
+  }
+
+  return fs.promises.readFile(resolved, "utf-8");
 }
 
 // Extract entity ID from metadata
@@ -153,13 +240,18 @@ function extractEntityId(metadata: string): string | null {
  */
 export function createSamlSp(config: SamlSpConfig): Router {
   // Lazy import express to avoid requiring it as a dependency
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const express = require("express");
   const router: Router = express.Router();
 
   const sessionProperty = config.sessionProperty || "user";
   const defaultRedirectUrl = config.defaultRedirectUrl || "/";
   const logoutRedirectUrl = config.logoutRedirectUrl || "/";
+
+  // Security settings
+  const allowedRedirectHosts = config.allowedRedirectHosts;
+  const stateMaxAge = config.stateMaxAge ?? 300000; // 5 minutes default
+  const regenerateSession = config.regenerateSession !== false; // true by default
 
   // Server instance (initialized lazily)
   let server: lasso.Server | null = null;
@@ -168,7 +260,7 @@ export function createSamlSp(config: SamlSpConfig): Router {
 
   // Initialize server
   async function initServer(): Promise<void> {
-    if (server) return;
+    if (server) {return;}
 
     if (!lasso.isInitialized()) {
       lasso.init();
@@ -224,12 +316,17 @@ export function createSamlSp(config: SamlSpConfig): Router {
   // GET /login - Initiate SAML login
   router.get("/login", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const login = new lasso.Login(server);
 
       // Store RelayState (where to redirect after login)
-      const relayState = (req.query.returnTo as string) || defaultRedirectUrl;
+      let relayState = (req.query.returnTo as string) || defaultRedirectUrl;
+
+      // Security: Validate redirect URL to prevent open redirect
+      if (!isValidRedirectUrl(relayState, allowedRedirectHosts)) {
+        relayState = defaultRedirectUrl;
+      }
 
       // Initialize authentication request
       login.initAuthnRequest();
@@ -242,32 +339,39 @@ export function createSamlSp(config: SamlSpConfig): Router {
       // Build the request message
       const result = login.buildAuthnRequestMsg();
 
-      // Store login state in session for later validation
-      const session = (req as any).session;
+      // Store login state in session for later validation (CSRF protection)
+      const session = (req as RequestWithSession).session;
+      const nonce = crypto.randomUUID();
       if (session) {
         session.samlLoginState = {
           relayState,
+          nonce,
+          timestamp: Date.now(),
         };
       }
+
+      // Include nonce in RelayState for round-trip validation
+      const statePayload = JSON.stringify({ url: relayState, nonce });
+      const encodedState = Buffer.from(statePayload).toString("base64url");
 
       // Redirect to IdP
       if (result.responseUrl) {
         const separator = result.responseUrl.includes("?") ? "&" : "?";
-        const url = relayState
-          ? `${result.responseUrl}${separator}RelayState=${encodeURIComponent(relayState)}`
-          : result.responseUrl;
+        const url = `${result.responseUrl}${separator}RelayState=${encodeURIComponent(encodedState)}`;
         res.redirect(url);
       } else {
-        // POST binding - return auto-submit form
+        // POST binding - return auto-submit form (with HTML escaping for XSS prevention)
+        // For POST binding, msgUrl contains the IdP URL
+        const postUrl = login.msgUrl || "";
         res.send(`
           <!DOCTYPE html>
           <html>
           <head><title>SAML Login</title></head>
           <body onload="document.forms[0].submit()">
             <noscript><p>JavaScript is disabled. Click the button to continue.</p></noscript>
-            <form method="POST" action="${result.responseUrl}">
-              <input type="hidden" name="SAMLRequest" value="${result.responseBody || ""}" />
-              ${relayState ? `<input type="hidden" name="RelayState" value="${relayState}" />` : ""}
+            <form method="POST" action="${escapeHtml(postUrl)}">
+              <input type="hidden" name="SAMLRequest" value="${escapeHtml(result.responseBody || "")}" />
+              <input type="hidden" name="RelayState" value="${escapeHtml(encodedState)}" />
               <noscript><input type="submit" value="Continue" /></noscript>
             </form>
           </body>
@@ -286,14 +390,44 @@ export function createSamlSp(config: SamlSpConfig): Router {
     next: NextFunction
   ) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const samlResponse = req.body.SAMLResponse;
-      const relayState = req.body.RelayState || defaultRedirectUrl;
+      const session = (req as RequestWithSession).session;
 
       if (!samlResponse) {
         res.status(400).send("Missing SAMLResponse");
         return;
+      }
+
+      // Security: Validate SAML state (CSRF protection)
+      const storedState = session?.samlLoginState;
+      if (!storedState || Date.now() - storedState.timestamp > stateMaxAge) {
+        res.status(400).send("SAML state expired or missing");
+        return;
+      }
+
+      // Security: Validate nonce from RelayState matches stored nonce
+      const relayStateParam = req.body.RelayState;
+      let relayState = defaultRedirectUrl;
+      if (relayStateParam) {
+        try {
+          const decoded = Buffer.from(relayStateParam, "base64url").toString("utf-8");
+          const parsed = JSON.parse(decoded);
+          if (parsed.nonce !== storedState.nonce) {
+            res.status(400).send("Invalid SAML state: nonce mismatch");
+            return;
+          }
+          relayState = parsed.url || defaultRedirectUrl;
+        } catch {
+          res.status(400).send("Invalid RelayState format");
+          return;
+        }
+      }
+
+      // Security: Validate redirect URL
+      if (!isValidRedirectUrl(relayState, allowedRedirectHosts)) {
+        relayState = defaultRedirectUrl;
       }
 
       const login = new lasso.Login(server);
@@ -301,9 +435,12 @@ export function createSamlSp(config: SamlSpConfig): Router {
       // Process the SAML response
       login.processResponseMsg(samlResponse);
 
+      // Security: Accept the SSO to complete validation
+      login.acceptSso();
+
       // Extract user information
       const nameId = login.nameId;
-      const nameIdFormat = login.nameIdFormat || lasso.NameIdFormat.UNSPECIFIED;
+      const nameIdFormat = (login.nameIdFormat || lasso.NameIdFormat.UNSPECIFIED) as lasso.NameIdFormatType;
 
       if (!nameId) {
         throw new Error("No NameID in SAML response");
@@ -320,9 +457,25 @@ export function createSamlSp(config: SamlSpConfig): Router {
       // Call onAuth callback
       const user = await config.onAuth(samlUser, req);
 
-      // Store in session
-      const session = (req as any).session;
-      if (session) {
+      // Security: Regenerate session to prevent session fixation
+      if (regenerateSession && session?.regenerate) {
+        await new Promise<void>((resolve, reject) => {
+          const savedState = {
+            [sessionProperty]: user,
+            samlNameId: nameId,
+            samlNameIdFormat: nameIdFormat,
+          };
+          session.regenerate((err: Error | null) => {
+            if (err) {
+              reject(err);
+            } else {
+              // Restore user data after regeneration
+              Object.assign(session, savedState);
+              resolve();
+            }
+          });
+        });
+      } else if (session) {
         session[sessionProperty] = user;
         session.samlNameId = nameId;
         session.samlNameIdFormat = nameIdFormat;
@@ -339,9 +492,9 @@ export function createSamlSp(config: SamlSpConfig): Router {
   // GET /logout - Initiate SAML logout
   router.get("/logout", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
       const nameId = config.getNameId
         ? config.getNameId(req)
         : session?.samlNameId;
@@ -373,14 +526,17 @@ export function createSamlSp(config: SamlSpConfig): Router {
       if (result.responseUrl) {
         res.redirect(result.responseUrl);
       } else {
+        // POST binding with HTML escaping for XSS prevention
+        // For POST binding, msgUrl contains the IdP logout URL
+        const postUrl = logout.msgUrl || "";
         res.send(`
           <!DOCTYPE html>
           <html>
           <head><title>SAML Logout</title></head>
           <body onload="document.forms[0].submit()">
             <noscript><p>JavaScript is disabled. Click the button to continue.</p></noscript>
-            <form method="POST" action="${result.responseUrl}">
-              <input type="hidden" name="SAMLRequest" value="${result.responseBody || ""}" />
+            <form method="POST" action="${escapeHtml(postUrl)}">
+              <input type="hidden" name="SAMLRequest" value="${escapeHtml(result.responseBody || "")}" />
               <noscript><input type="submit" value="Continue" /></noscript>
             </form>
           </body>
@@ -399,11 +555,11 @@ export function createSamlSp(config: SamlSpConfig): Router {
     next: NextFunction
   ) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const samlRequest = req.body.SAMLRequest;
       const samlResponse = req.body.SAMLResponse;
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
 
       if (samlResponse) {
         // This is a logout response from IdP
@@ -442,13 +598,16 @@ export function createSamlSp(config: SamlSpConfig): Router {
         if (result.responseUrl) {
           res.redirect(result.responseUrl);
         } else {
+          // POST binding with HTML escaping for XSS prevention
+          // For POST binding, msgUrl contains the IdP logout URL
+          const postUrl = logout.msgUrl || "";
           res.send(`
             <!DOCTYPE html>
             <html>
             <head><title>SAML Logout</title></head>
             <body onload="document.forms[0].submit()">
-              <form method="POST" action="${result.responseUrl}">
-                <input type="hidden" name="SAMLResponse" value="${result.responseBody || ""}" />
+              <form method="POST" action="${escapeHtml(postUrl)}">
+                <input type="hidden" name="SAMLResponse" value="${escapeHtml(result.responseBody || "")}" />
                 <noscript><input type="submit" value="Continue" /></noscript>
               </form>
             </body>
@@ -466,11 +625,11 @@ export function createSamlSp(config: SamlSpConfig): Router {
   // GET /slo - Single Logout Service (HTTP-Redirect binding)
   router.get("/slo", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!server) throw new Error("Server not initialized");
+      if (!server) {throw new Error("Server not initialized");}
 
       const samlRequest = req.query.SAMLRequest as string;
       const samlResponse = req.query.SAMLResponse as string;
-      const session = (req as any).session;
+      const session = (req as RequestWithSession).session;
 
       if (samlResponse) {
         // Logout response from IdP
@@ -534,7 +693,7 @@ export function requireAuth(options?: {
   const loginUrl = options?.loginUrl || "/saml/login";
 
   return (req: Request, res: Response, next: NextFunction): void => {
-    const session = (req as any).session;
+    const session = (req as RequestWithSession).session;
     if (session && session[sessionProperty]) {
       next();
     } else {

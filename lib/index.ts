@@ -31,7 +31,7 @@ interface NativeBinding {
 // node-gyp-build looks for prebuilds first, then falls back to build/Release
 let binding: NativeBinding;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   binding = require("node-gyp-build")(path.join(__dirname, ".."));
 } catch (e) {
   throw new Error(
