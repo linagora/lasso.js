@@ -28,10 +28,11 @@ interface NativeBinding {
 }
 
 // Load native binding
+// node-gyp-build looks for prebuilds first, then falls back to build/Release
 let binding: NativeBinding;
 try {
-  // Load the locally built binary
-  binding = require(path.join(__dirname, "..", "build", "Release", "lasso.node"));
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  binding = require("node-gyp-build")(path.join(__dirname, ".."));
 } catch (e) {
   throw new Error(
     `Failed to load lasso.js native binding: ${e instanceof Error ? e.message : String(e)}\n` +
