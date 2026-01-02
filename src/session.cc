@@ -35,8 +35,17 @@ Napi::Object Session::NewInstance(Napi::Env env, LassoSession* session) {
   if (session) {
     gchar* dump = lasso_session_dump(session);
     if (dump) {
-      wrapper->session_ = lasso_session_new_from_dump(dump);
+      LassoSession* newSession = lasso_session_new_from_dump(dump);
       g_free(dump);
+      // Security: Check if restoration succeeded before assigning
+      if (newSession) {
+        // Destroy the default session created by constructor
+        if (wrapper->session_) {
+          lasso_session_destroy(wrapper->session_);
+        }
+        wrapper->session_ = newSession;
+      }
+      // If restoration fails, keep the default empty session
     }
   }
   wrapper->owns_session_ = true;

@@ -32,8 +32,17 @@ Napi::Object Identity::NewInstance(Napi::Env env, LassoIdentity* identity) {
   if (identity) {
     gchar* dump = lasso_identity_dump(identity);
     if (dump) {
-      wrapper->identity_ = lasso_identity_new_from_dump(dump);
+      LassoIdentity* newIdentity = lasso_identity_new_from_dump(dump);
       g_free(dump);
+      // Security: Check if restoration succeeded before assigning
+      if (newIdentity) {
+        // Destroy the default identity created by constructor
+        if (wrapper->identity_) {
+          lasso_identity_destroy(wrapper->identity_);
+        }
+        wrapper->identity_ = newIdentity;
+      }
+      // If restoration fails, keep the default empty identity
     }
   }
   wrapper->owns_identity_ = true;
