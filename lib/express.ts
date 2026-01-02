@@ -11,8 +11,9 @@ import * as crypto from "crypto";
 
 /**
  * Escape HTML special characters to prevent XSS
+ * @internal Exported for testing
  */
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -23,8 +24,9 @@ function escapeHtml(str: string): string {
 
 /**
  * Validate redirect URL to prevent open redirect attacks
+ * @internal Exported for testing
  */
-function isValidRedirectUrl(url: string, allowedHosts?: string[]): boolean {
+export function isValidRedirectUrl(url: string, allowedHosts?: string[]): boolean {
   // Allow relative URLs (but not protocol-relative)
   if (url.startsWith("/") && !url.startsWith("//")) {
     return true;
@@ -164,7 +166,8 @@ async function readFileOrString(value: string): Promise<string> {
 
   // Security: Ensure the path doesn't traverse outside cwd
   const cwd = process.cwd();
-  if (!resolved.startsWith(cwd)) {
+  const relative = pathModule.relative(cwd, resolved);
+  if (relative.startsWith("..") || pathModule.isAbsolute(relative)) {
     throw new Error("Path traversal detected: path must be within working directory");
   }
 
@@ -310,32 +313,37 @@ export function createSamlSp(config: SamlSpConfig): Router {
 
       // Store login state in session for later validation (CSRF protection)
       const session = (req as any).session;
+      const nonce = crypto.randomUUID();
       if (session) {
         session.samlLoginState = {
           relayState,
-          nonce: crypto.randomUUID(),
+          nonce,
           timestamp: Date.now(),
         };
       }
 
+      // Include nonce in RelayState for round-trip validation
+      const statePayload = JSON.stringify({ url: relayState, nonce });
+      const encodedState = Buffer.from(statePayload).toString("base64url");
+
       // Redirect to IdP
       if (result.responseUrl) {
         const separator = result.responseUrl.includes("?") ? "&" : "?";
-        const url = relayState
-          ? `${result.responseUrl}${separator}RelayState=${encodeURIComponent(relayState)}`
-          : result.responseUrl;
+        const url = `${result.responseUrl}${separator}RelayState=${encodeURIComponent(encodedState)}`;
         res.redirect(url);
       } else {
         // POST binding - return auto-submit form (with HTML escaping for XSS prevention)
+        // For POST binding, msgUrl contains the IdP URL
+        const postUrl = login.msgUrl || "";
         res.send(`
           <!DOCTYPE html>
           <html>
           <head><title>SAML Login</title></head>
           <body onload="document.forms[0].submit()">
             <noscript><p>JavaScript is disabled. Click the button to continue.</p></noscript>
-            <form method="POST" action="${escapeHtml(result.responseUrl || "")}">
+            <form method="POST" action="${escapeHtml(postUrl)}">
               <input type="hidden" name="SAMLRequest" value="${escapeHtml(result.responseBody || "")}" />
-              ${relayState ? `<input type="hidden" name="RelayState" value="${escapeHtml(relayState)}" />` : ""}
+              <input type="hidden" name="RelayState" value="${escapeHtml(encodedState)}" />
               <noscript><input type="submit" value="Continue" /></noscript>
             </form>
           </body>
@@ -371,8 +379,25 @@ export function createSamlSp(config: SamlSpConfig): Router {
         return;
       }
 
-      // Security: Validate redirect URL from stored state (not from request)
-      let relayState = storedState.relayState || defaultRedirectUrl;
+      // Security: Validate nonce from RelayState matches stored nonce
+      const relayStateParam = req.body.RelayState;
+      let relayState = defaultRedirectUrl;
+      if (relayStateParam) {
+        try {
+          const decoded = Buffer.from(relayStateParam, "base64url").toString("utf-8");
+          const parsed = JSON.parse(decoded);
+          if (parsed.nonce !== storedState.nonce) {
+            res.status(400).send("Invalid SAML state: nonce mismatch");
+            return;
+          }
+          relayState = parsed.url || defaultRedirectUrl;
+        } catch {
+          res.status(400).send("Invalid RelayState format");
+          return;
+        }
+      }
+
+      // Security: Validate redirect URL
       if (!isValidRedirectUrl(relayState, allowedRedirectHosts)) {
         relayState = defaultRedirectUrl;
       }
@@ -474,13 +499,15 @@ export function createSamlSp(config: SamlSpConfig): Router {
         res.redirect(result.responseUrl);
       } else {
         // POST binding with HTML escaping for XSS prevention
+        // For POST binding, msgUrl contains the IdP logout URL
+        const postUrl = logout.msgUrl || "";
         res.send(`
           <!DOCTYPE html>
           <html>
           <head><title>SAML Logout</title></head>
           <body onload="document.forms[0].submit()">
             <noscript><p>JavaScript is disabled. Click the button to continue.</p></noscript>
-            <form method="POST" action="${escapeHtml(result.responseUrl || "")}">
+            <form method="POST" action="${escapeHtml(postUrl)}">
               <input type="hidden" name="SAMLRequest" value="${escapeHtml(result.responseBody || "")}" />
               <noscript><input type="submit" value="Continue" /></noscript>
             </form>
@@ -544,12 +571,14 @@ export function createSamlSp(config: SamlSpConfig): Router {
           res.redirect(result.responseUrl);
         } else {
           // POST binding with HTML escaping for XSS prevention
+          // For POST binding, msgUrl contains the IdP logout URL
+          const postUrl = logout.msgUrl || "";
           res.send(`
             <!DOCTYPE html>
             <html>
             <head><title>SAML Logout</title></head>
             <body onload="document.forms[0].submit()">
-              <form method="POST" action="${escapeHtml(result.responseUrl || "")}">
+              <form method="POST" action="${escapeHtml(postUrl)}">
                 <input type="hidden" name="SAMLResponse" value="${escapeHtml(result.responseBody || "")}" />
                 <noscript><input type="submit" value="Continue" /></noscript>
               </form>

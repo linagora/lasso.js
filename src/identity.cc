@@ -41,8 +41,10 @@ Napi::Object Identity::NewInstance(Napi::Env env, LassoIdentity* identity) {
           lasso_identity_destroy(wrapper->identity_);
         }
         wrapper->identity_ = newIdentity;
+      } else {
+        // Restoration failed: throw error instead of silently using empty identity
+        throw Napi::Error::New(env, "Failed to restore LassoIdentity from dump");
       }
-      // If restoration fails, keep the default empty identity
     }
   }
   wrapper->owns_identity_ = true;

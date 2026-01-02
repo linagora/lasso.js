@@ -44,8 +44,10 @@ Napi::Object Session::NewInstance(Napi::Env env, LassoSession* session) {
           lasso_session_destroy(wrapper->session_);
         }
         wrapper->session_ = newSession;
+      } else {
+        // Restoration failed: throw error instead of silently using empty session
+        throw Napi::Error::New(env, "Failed to restore LassoSession from dump");
       }
-      // If restoration fails, keep the default empty session
     }
   }
   wrapper->owns_session_ = true;

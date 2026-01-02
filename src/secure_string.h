@@ -4,6 +4,15 @@
 #include <string>
 #include <cstring>
 
+// Platform-specific secure memory clearing
+#if defined(__APPLE__) || defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+  #include <strings.h>  // for explicit_bzero on POSIX
+  #define HAVE_EXPLICIT_BZERO 1
+#elif defined(_WIN32)
+  #include <windows.h>
+  #define HAVE_SECURE_ZERO_MEMORY 1
+#endif
+
 namespace lasso_js {
 
 /**
@@ -72,15 +81,21 @@ public:
 private:
   std::string data_;
 
-  // Securely zero out the string contents
+  // Securely zero out the string contents using platform-specific functions
   void secure_clear() {
     if (!data_.empty()) {
-      // Use volatile to prevent compiler optimization
+#if defined(HAVE_EXPLICIT_BZERO)
+      explicit_bzero(&data_[0], data_.size());
+#elif defined(HAVE_SECURE_ZERO_MEMORY)
+      SecureZeroMemory(&data_[0], data_.size());
+#else
+      // Fallback: use volatile to prevent compiler optimization
       volatile char* p = &data_[0];
       size_t n = data_.size();
       while (n--) {
         *p++ = 0;
       }
+#endif
       data_.clear();
     }
   }

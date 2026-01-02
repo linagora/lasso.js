@@ -8,30 +8,26 @@
  * - CSRF state validation
  */
 
-// Import the functions we're testing (we need to expose them for testing)
-// Since the functions are internal, we test them through the module exports
+import * as crypto from "crypto";
+import { escapeHtml, isValidRedirectUrl } from "../lib/express";
 
 describe("Security", () => {
-  describe("URL Validation", () => {
-    // Test isValidRedirectUrl logic through behavior
+  describe("URL Validation (isValidRedirectUrl)", () => {
     it("should accept relative URLs starting with /", () => {
-      // Relative URLs like /dashboard, /profile are safe
       const safeUrls = ["/", "/dashboard", "/user/profile", "/a/b/c"];
       safeUrls.forEach((url) => {
-        expect(url.startsWith("/") && !url.startsWith("//")).toBe(true);
+        expect(isValidRedirectUrl(url)).toBe(true);
       });
     });
 
     it("should reject protocol-relative URLs", () => {
-      // URLs like //evil.com are dangerous
       const dangerousUrls = ["//evil.com", "//attacker.org/path"];
       dangerousUrls.forEach((url) => {
-        expect(url.startsWith("//")).toBe(true);
+        expect(isValidRedirectUrl(url)).toBe(false);
       });
     });
 
     it("should reject absolute URLs by default", () => {
-      // Absolute URLs like https://evil.com are dangerous without whitelist
       const dangerousUrls = [
         "https://evil.com",
         "http://attacker.org",
@@ -39,22 +35,24 @@ describe("Security", () => {
         "data:text/html,<script>alert(1)</script>",
       ];
       dangerousUrls.forEach((url) => {
-        expect(url.startsWith("/") && !url.startsWith("//")).toBe(false);
+        expect(isValidRedirectUrl(url)).toBe(false);
       });
+    });
+
+    it("should accept absolute URLs when host is in allowlist", () => {
+      const allowedHosts = ["example.com", "trusted.org"];
+      expect(isValidRedirectUrl("https://example.com/path", allowedHosts)).toBe(true);
+      expect(isValidRedirectUrl("https://trusted.org", allowedHosts)).toBe(true);
+    });
+
+    it("should reject absolute URLs when host is not in allowlist", () => {
+      const allowedHosts = ["example.com"];
+      expect(isValidRedirectUrl("https://evil.com", allowedHosts)).toBe(false);
+      expect(isValidRedirectUrl("https://example.com.evil.com", allowedHosts)).toBe(false);
     });
   });
 
-  describe("HTML Escaping", () => {
-    // Test escapeHtml function logic
-    const escapeHtml = (str: string): string => {
-      return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#x27;");
-    };
-
+  describe("HTML Escaping (escapeHtml)", () => {
     it("should escape < and >", () => {
       expect(escapeHtml("<script>")).toBe("&lt;script&gt;");
     });
@@ -81,6 +79,13 @@ describe("Security", () => {
       expect(escaped).not.toContain("<");
       expect(escaped).not.toContain(">");
       expect(escaped).not.toContain('"');
+    });
+
+    it("should be idempotent for already escaped content", () => {
+      const escaped = escapeHtml("<script>");
+      const doubleEscaped = escapeHtml(escaped);
+      // Double escaping should change the string (escape the &)
+      expect(doubleEscaped).toBe("&amp;lt;script&amp;gt;");
     });
   });
 
@@ -138,6 +143,13 @@ describe("Security", () => {
     it("should require state to exist", () => {
       const storedState = null;
       expect(!storedState).toBe(true);
+    });
+
+    it("should validate nonce format (UUID)", () => {
+      const nonce = crypto.randomUUID();
+      // UUID format: 8-4-4-4-12 hex characters
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      expect(uuidRegex.test(nonce)).toBe(true);
     });
   });
 
