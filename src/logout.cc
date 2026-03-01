@@ -60,7 +60,10 @@ Logout::~Logout() {
     g_object_unref(logout_);
     logout_ = nullptr;
   }
-  server_ref_.Reset();
+  // Note: Don't call server_ref_.Reset() here.
+  // Calling Reset() during V8 shutdown can throw Napi::Error,
+  // and throwing from a destructor calls std::terminate().
+  // The Napi::Reference destructor handles cleanup safely.
 }
 
 /**
