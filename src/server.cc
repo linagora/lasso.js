@@ -46,10 +46,11 @@ Server::Server(const Napi::CallbackInfo& info)
 }
 
 Server::~Server() {
-  if (server_ && owns_server_) {
+  // Only cleanup if lasso is still initialized
+  if (server_ && owns_server_ && IsLassoInitialized()) {
     g_object_unref(server_);
-    server_ = nullptr;
   }
+  server_ = nullptr;
 }
 
 /**

@@ -62,10 +62,11 @@ Session::Session(const Napi::CallbackInfo& info)
 }
 
 Session::~Session() {
-  if (session_ && owns_session_) {
+  // Only cleanup if lasso is still initialized
+  if (session_ && owns_session_ && IsLassoInitialized()) {
     lasso_session_destroy(session_);
-    session_ = nullptr;
   }
+  session_ = nullptr;
 }
 
 /**

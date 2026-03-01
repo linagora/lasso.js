@@ -59,10 +59,11 @@ Identity::Identity(const Napi::CallbackInfo& info)
 }
 
 Identity::~Identity() {
-  if (identity_ && owns_identity_) {
+  // Only cleanup if lasso is still initialized
+  if (identity_ && owns_identity_ && IsLassoInitialized()) {
     lasso_identity_destroy(identity_);
-    identity_ = nullptr;
   }
+  identity_ = nullptr;
 }
 
 /**

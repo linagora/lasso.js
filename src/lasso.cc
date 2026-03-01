@@ -19,6 +19,17 @@
 namespace lasso_js {
 
 /**
+ * Environment cleanup hook - called before V8 shuts down
+ * This ensures lasso is properly shut down before destructors run
+ */
+static void EnvironmentCleanupHook(void* /*arg*/) {
+  if (IsLassoInitialized()) {
+    lasso_shutdown();
+    SetLassoInitialized(false);
+  }
+}
+
+/**
  * Configure libxml2 security settings to prevent XXE attacks
  * This should be called before any XML parsing
  */
@@ -50,6 +61,9 @@ Napi::Value Init(const Napi::CallbackInfo& info) {
   if (rc != 0) {
     throw LassoError(env, rc, "lasso_init");
   }
+
+  // Register cleanup hook to shut down lasso before V8 terminates
+  napi_add_env_cleanup_hook(env, EnvironmentCleanupHook, nullptr);
 
   SetLassoInitialized(true);
   return Napi::Boolean::New(env, true);

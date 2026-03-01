@@ -60,6 +60,8 @@ Login::Login(const Napi::CallbackInfo& info)
 
   // Keep reference to server to prevent GC
   server_ref_ = Napi::Persistent(serverObj);
+  // Prevent the reference destructor from throwing during V8 shutdown
+  server_ref_.SuppressDestruct();
 
   login_ = lasso_login_new(server->GetServer());
   if (!login_) {
@@ -68,10 +70,12 @@ Login::Login(const Napi::CallbackInfo& info)
 }
 
 Login::~Login() {
-  if (login_) {
+  // Only cleanup if lasso is still initialized
+  // During V8 shutdown, lasso may already be shut down
+  if (login_ && IsLassoInitialized()) {
     g_object_unref(login_);
-    login_ = nullptr;
   }
+  login_ = nullptr;
   // Note: Don't call server_ref_.Reset() here.
   // Calling Reset() during V8 shutdown can throw Napi::Error,
   // and throwing from a destructor calls std::terminate().
