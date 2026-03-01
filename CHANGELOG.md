@@ -5,11 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.1] - 2026-01-17
+## [0.2.1] - 2026-03-01
+
+### Fixed
+
+- Don't call `server_ref_.Reset()` during V8 shutdown (prevents crash on exit)
 
 ### Changed
 
 - Bump node-gyp from 10.0.0 to 12.1.0
+- Update dependencies
 
 ## [0.2.0] - 2026-01-02
 
