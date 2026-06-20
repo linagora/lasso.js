@@ -138,11 +138,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # NB: do NOT set registry-url here. It makes setup-node write an .npmrc
+      # with a placeholder _authToken, which npm treats as a credential and
+      # uses for token auth (failing with E404) instead of OIDC trusted
+      # publishing. Without it, npm has no credential and uses OIDC.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
       - name: Update npm (trusted publishing/OIDC requires npm >= 11.5.1)
