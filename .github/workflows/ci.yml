@@ -95,7 +95,7 @@ jobs:
         run: npm run prebuildify
 
       - name: Upload prebuilds
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: prebuilds-${{ matrix.target }}
           path: prebuilds/
@@ -125,7 +125,7 @@ jobs:
         run: mv output/prebuilds prebuilds
 
       - name: Upload prebuilds
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: prebuilds-linux-arm64
           path: prebuilds/
@@ -152,7 +152,7 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Download all prebuilds
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: prebuilds-*
           path: prebuilds/
@@ -170,9 +170,12 @@ jobs:
       - name: Remove prepare script (avoid rebuild during publish)
         run: npm pkg delete scripts.prepare
 
-      # Trusted publishing (OIDC): no NODE_AUTH_TOKEN. Requires a Trusted
-      # Publisher configured on npmjs.com for this package (repo
-      # linagora/lasso.js, workflow ci.yml). npm >= 11.5.1 generates
-      # provenance automatically when publishing via OIDC.
+      # Trusted publishing (OIDC). Requires a Trusted Publisher configured on
+      # npmjs.com for this package (repo linagora/lasso.js, workflow ci.yml).
+      # setup-node exports a placeholder NODE_AUTH_TOKEN by default; npm would
+      # use it for token auth and never attempt OIDC. We force it empty so npm
+      # falls back to OIDC trusted publishing (which also generates provenance).
       - name: Publish to npm
-        run: npm publish
+        run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ""
