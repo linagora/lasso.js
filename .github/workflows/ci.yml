@@ -138,14 +138,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # NB: do NOT set registry-url here. It makes setup-node write an .npmrc
-      # with a placeholder _authToken, which npm treats as a credential and
-      # uses for token auth (failing with E404) instead of OIDC trusted
-      # publishing. Without it, npm has no credential and uses OIDC.
+      # registry-url is required so npm knows which registry to run the OIDC
+      # token exchange against (without it, npm skips OIDC and fails with
+      # ENEEDAUTH). setup-node also exports a placeholder NODE_AUTH_TOKEN; we
+      # blank it in the publish step so npm uses OIDC instead of token auth.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
       - name: Update npm (trusted publishing/OIDC requires npm >= 11.5.1)
@@ -172,9 +173,8 @@ jobs:
 
       # Trusted publishing (OIDC). Requires a Trusted Publisher configured on
       # npmjs.com for this package (repo linagora/lasso.js, workflow ci.yml).
-      # setup-node exports a placeholder NODE_AUTH_TOKEN by default; npm would
-      # use it for token auth and never attempt OIDC. We force it empty so npm
-      # falls back to OIDC trusted publishing (which also generates provenance).
+      # NODE_AUTH_TOKEN is blanked to override setup-node's placeholder token so
+      # npm performs the OIDC exchange (which also generates provenance).
       - name: Publish to npm
         run: npm publish --provenance
         env:
