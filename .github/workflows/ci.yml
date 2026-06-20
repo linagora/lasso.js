@@ -171,25 +171,11 @@ jobs:
       - name: Remove prepare script (avoid rebuild during publish)
         run: npm pkg delete scripts.prepare
 
-      - name: Debug OIDC environment
-        run: |
-          echo "npm version: $(npm -v)"
-          echo "node version: $(node -v)"
-          echo "GITHUB_ACTIONS=$GITHUB_ACTIONS"
-          echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
-          echo "GITHUB_WORKFLOW_REF=$GITHUB_WORKFLOW_REF"
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
-          echo "registry: $(npm config get registry)"
-          echo "userconfig path: $NPM_CONFIG_USERCONFIG"
-          echo "--- userconfig contents (token redacted) ---"
-          sed 's/_authToken=.*/_authToken=<redacted>/' "$NPM_CONFIG_USERCONFIG" || true
-
       # Trusted publishing (OIDC). Requires a Trusted Publisher configured on
       # npmjs.com for this package (repo linagora/lasso.js, workflow ci.yml).
       # NODE_AUTH_TOKEN is blanked to override setup-node's placeholder token so
       # npm performs the OIDC exchange (which also generates provenance).
       - name: Publish to npm
-        run: npm publish --provenance --loglevel silly
+        run: npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ""
