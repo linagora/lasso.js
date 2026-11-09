@@ -1,0 +1,7 @@
+# Inscrit ce dépôt au bot auto-js-pr (mises à jour de dépendances vulnérables).
+#
+# `npm run build` recompile l'addon natif (node-gyp) : le bot s'en tient aux
+# tests et à la vérification des types.
+verifyCommands:
+  - npm run test
+  - npm run check
